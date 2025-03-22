@@ -14,6 +14,7 @@ function newTab(url = 'about:blank', scripts = []) {
     }
     return tab;
 }
+// newTab('', ['https://raw.githubusercontent.com/danielkryska/scrapping-functionalities/refs/heads/master/script.js])
 
 function closeTab() {
     window.close();
