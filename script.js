@@ -74,44 +74,8 @@ function setTabActive() {
     window.focus();
 }
 
-async function goToUrl(url, scripts = ['https://raw.githubusercontent.com/danielkryska/scrapping-functionalities/refs/heads/master/script.js']) {
-    console.log(`Going to "${url}"...`);
-    
-    return new Promise((resolve, reject) => {
-        if (typeof url !== 'string' || url.trim() === '') {
-            reject(new Error('Invalid URL'));
-            return;
-        }
-        
-        // Handle page load event
-        const onLoad = async () => {
-            console.log(`Page "${url}" loaded.`);
-            
-            try {
-                // Load each script sequentially using loadScript
-                for (const scriptUrl of scripts) {
-                    console.log(`Loading script: ${scriptUrl}`);
-                    await loadScript(scriptUrl);
-                    console.log(`Script loaded successfully: ${scriptUrl}`);
-                }
-                
-                resolve('All scripts loaded successfully');
-            } catch (error) {
-                console.error('Error loading scripts:', error);
-                reject(error);
-            }
-        };
-        
-        // Add event listener for page load
-        window.addEventListener('load', onLoad, { once: true });
-        
-        // Navigate to the URL
-        window.location.href = url;
-    });
-}
 
 // SELECT
-
 function allElements(selector) {
     console.log(`Selecting all elements by "${selector}"...`);
     return Array.from(document.querySelectorAll(selector));
@@ -458,8 +422,8 @@ const POCKET_ITEM_OPTIONS_SELECTOR = (childNr) => `article[data-testid="article-
 const POCKET_ITEM_TITLE_SELECTOR = (childNr) => `article[data-testid="article-card"]:nth-child(${childNr}) h2.title`;
 const POCKET_ITEM_REMOVE_SELECTOR = (childNr) => `article[data-testid="article-card"]:nth-child(${childNr}) div[data-testid="Delete"]`;
 const getPocket = {
-    goToVideos: async () => await goToUrl('https://getpocket.com/saves/videos') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
-    goToArticls: async () => await goToUrl('https://getpocket.com/saves/articles') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
+    goToVideos: async () => await newTab('https://getpocket.com/saves/videos') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
+    goToArticls: async () => await newTab('https://getpocket.com/saves/articles') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
 
     itemsSize: async () => (allElements(POCKET_PUBLISHER_SELECTOR)).length,
     getPublisher: async (childNr) => getText(element(`${POCKET_PUBLISHER_SELECTOR}:nth-child(${childNr})`)),
@@ -479,7 +443,7 @@ const GEMINI_CHAT_STOP_BTN_SELECTOR = 'mat-icon[data-mat-icon-name="stop"]';
 const GEMINI_RESPONSE_SELECTOR = 'message-content';
 
 const geminiChat = {
-    goToChat: async () => await goToUrl(GEMINI_CHAT_URL) && await waitUntil(element(GEMINI_CHAT_INPUT_SELECTOR), { visible: true }),
+    goToChat: async () => await newTab(GEMINI_CHAT_URL) && await waitUntil(element(GEMINI_CHAT_INPUT_SELECTOR), { visible: true }),
     setPrompt: async (text) => setValue(GEMINI_CHAT_INPUT_SELECTOR, text) && await wait(1000),
     submitPrompt: async () => (await element(GEMINI_CHAT_SUBMIT_SELECTOR)).click() && await wait(1000),
     newChat: async () => (await element(GEMINI_CHAT_NEW_CHAT_SELECTOR)).click() && await wait(1000),
