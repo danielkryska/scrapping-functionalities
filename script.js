@@ -14,65 +14,113 @@ async function loadScript(url) {
 
 // NAVIGATION
 async function newTab(url = 'about:blank', scripts = ['https://raw.githubusercontent.com/danielkryska/scrapping-functionalities/refs/heads/master/script.js']) {
-    // For extension context, we can use chrome.tabs API
+    console.log(`Opening new tab: "${url}"...`);
+    
     return new Promise((resolve, reject) => {
-        // Create a new tab with the target URL
-        chrome.tabs.create({ url: url, active: true }, async (newTab) => {
-            console.log(`Tab created with ID: ${newTab.id}`);
-            
-            // Wait for the tab to finish loading
-            chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo, tab) {
-                if (tabId === newTab.id && changeInfo.status === 'complete') {
-                    // Remove the listener once we've handled the event
-                    chrome.tabs.onUpdated.removeListener(listener);
+        // Open the new tab
+        const newWindow = window.open(url, '_blank');
+        
+        if (!newWindow) {
+            reject(new Error('The new tab couldn\'t be opened. Pop-up might be blocked.'));
+            return;
+        }
+        
+        // Focus the new window
+        newWindow.focus();
+        
+        // Function to check if the new window is loaded
+        const checkWindowLoad = () => {
+            try {
+                // Try to access the document state to see if the window is loaded
+                // This might fail due to CORS if the URL is on a different domain
+                if (newWindow.document.readyState === 'complete') {
+                    console.log(`New tab document loaded for: ${url}`);
                     
-                    // Execute each script in the new tab's context
-                    const injectScripts = async () => {
+                    // Load all scripts
+                    const loadAllScripts = async () => {
                         try {
                             for (const scriptUrl of scripts) {
-                                // Fetch the script content
-                                const response = await fetch(scriptUrl);
-                                if (!response.ok) throw new Error(`Failed to fetch script: ${scriptUrl}`);
-                                const scriptContent = await response.text();
-                                
-                                // Inject the script into the tab
-                                chrome.scripting.executeScript({
-                                    target: { tabId: newTab.id },
-                                    func: (code) => {
-                                        // This function runs in the context of the target tab
-                                        const script = document.createElement('script');
-                                        script.textContent = code;
-                                        document.documentElement.appendChild(script);
-                                        console.log(`Script injected successfully`);
-                                    },
-                                    args: [scriptContent]
-                                }, () => {
-                                    if (chrome.runtime.lastError) {
-                                        console.error('Script injection error:', chrome.runtime.lastError);
-                                    } else {
-                                        console.log(`Script injected: ${scriptUrl}`);
-                                    }
-                                });
-                                
-                                // Add a small delay between script injections
-                                await new Promise(resolve => setTimeout(resolve, 100));
+                                try {
+                                    // We need to execute this in the context of the new window
+                                    const script = newWindow.document.createElement('script');
+                                    
+                                    // Create a promise for script loading
+                                    const scriptLoaded = new Promise((resolveScript, rejectScript) => {
+                                        script.onload = () => resolveScript();
+                                        script.onerror = (e) => rejectScript(e);
+                                    });
+                                    
+                                    // Set the script source
+                                    script.src = scriptUrl;
+                                    newWindow.document.head.appendChild(script);
+                                    
+                                    // Wait for script to load
+                                    await scriptLoaded;
+                                    console.log(`Script loaded in new tab: ${scriptUrl}`);
+                                } catch (scriptError) {
+                                    console.error(`Error loading script ${scriptUrl}:`, scriptError);
+                                }
                             }
-                            
-                            // Focus the tab when all scripts are loaded
-                            chrome.tabs.update(newTab.id, { active: true }, () => {
-                                console.log('All scripts injected, tab focused');
-                                resolve(newTab);
-                            });
+                            console.log("All scripts loaded in new tab");
+                            resolve(newWindow);
                         } catch (error) {
-                            console.error('Error during script injection:', error);
-                            reject(error);
+                            console.error("Error in script loading process:", error);
+                            // Still resolve with the window even if scripts fail
+                            resolve(newWindow);
                         }
                     };
                     
-                    injectScripts();
+                    loadAllScripts();
+                } else {
+                    // Still loading, check again after a delay
+                    setTimeout(checkWindowLoad, 100);
                 }
-            });
-        });
+            } catch (e) {
+                // This could happen due to CORS restrictions
+                // Just wait and try again until we get a "load" event
+                console.log("Waiting for window to load...");
+                setTimeout(checkWindowLoad, 100);
+            }
+        };
+        
+        // Add load event listener to the new window
+        newWindow.addEventListener('load', function() {
+            console.log("Window load event triggered");
+            // Try loading scripts after the window has fully loaded
+            try {
+                const loadScriptsAfterLoad = async () => {
+                    for (const scriptUrl of scripts) {
+                        try {
+                            // Load script in the new window context
+                            const script = newWindow.document.createElement('script');
+                            script.src = scriptUrl;
+                            newWindow.document.head.appendChild(script);
+                            console.log(`Script injected: ${scriptUrl}`);
+                        } catch (error) {
+                            console.error(`Error injecting script ${scriptUrl}:`, error);
+                        }
+                    }
+                    console.log("All scripts injected");
+                };
+                
+                loadScriptsAfterLoad();
+                // Resolve with the window object so caller can use it
+                resolve(newWindow);
+            } catch (e) {
+                console.error("Error loading scripts after window load:", e);
+                // Still resolve with the window so the caller can use it
+                resolve(newWindow);
+            }
+        }, { once: true });
+        
+        // Start checking if we can determine when the document is ready
+        checkWindowLoad();
+        
+        // Set a timeout to resolve anyway if things take too long
+        setTimeout(() => {
+            console.log("Timeout reached, resolving with window regardless of script status");
+            resolve(newWindow);
+        }, 10000);
     });
 }
 
