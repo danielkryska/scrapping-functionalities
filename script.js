@@ -1,46 +1,62 @@
 // RUN SCRIPT IN BROWSER
-async function loadScript(src) {
-    return new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = src;
-        script.async = true;
-        script.onload = () => resolve(script);
-        script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-        document.head.appendChild(script);
-    });
+async function loadScript(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch script: ${url}`);
+    const scriptContent = await response.text();
+
+    const script = document.createElement("script");
+    script.textContent = scriptContent;
+    document.documentElement.appendChild(script);
 }
-// await loadScript('https://raw.githubusercontent.com/danielkryska/scrapping-functionalities/refs/heads/master/lib.js');
+
+// await loadScript('https://raw.githubusercontent.com/danielkryska/scrapping-functionalities/refs/heads/master/script.js');
 
 
 // NAVIGATION
 async function newTab(url = 'about:blank', scripts = ['https://raw.githubusercontent.com/danielkryska/scrapping-functionalities/refs/heads/master/script.js']) {
-    console.log(`Open new tab: "${url}"...`);
+    console.log(`Opening new tab: "${url}"...`);
+    
     return new Promise((resolve, reject) => {
         const tab = window.open(url, '_blank');
 
         if (!tab) {
-            reject(new Error('The new tab couldn\'t be open.'));
+            reject(new Error('The new tab couldn\'t be opened.'));
             return;
         }
 
-        const checkLoad = () => {
+        const checkLoad = async () => {
             try {
                 if (tab.document.readyState === 'complete') {
                     console.log(`Tab "${url}" loaded.`);
                     window.focus();
-
-                    scripts.forEach(scriptUrl => {
-                        const script = tab.document.createElement('script');
-                        script.src = scriptUrl;
-                        script.async = true;
-                        tab.document.head.appendChild(script);
-                    });
-
-                    resolve(tab);
+                    
+                    // Use Promise.all to load all scripts concurrently
+                    try {
+                        for (const scriptUrl of scripts) {
+                            // Using the loadScript function within the new tab's context
+                            await (async function() {
+                                const scriptResponse = await fetch(scriptUrl);
+                                if (!scriptResponse.ok) throw new Error(`Failed to fetch script: ${scriptUrl}`);
+                                const scriptContent = await scriptResponse.text();
+                                
+                                const script = tab.document.createElement("script");
+                                script.textContent = scriptContent;
+                                tab.document.documentElement.appendChild(script);
+                                
+                                console.log(`Script loaded in new tab: ${scriptUrl}`);
+                            })();
+                        }
+                        console.log("All scripts loaded in new tab");
+                        resolve(tab);
+                    } catch (scriptError) {
+                        console.error("Error loading scripts in new tab:", scriptError);
+                        reject(scriptError);
+                    }
                 } else {
                     setTimeout(checkLoad, 100);
                 }
             } catch (e) {
+                // This catch block handles the case when the tab is not yet ready
                 setTimeout(checkLoad, 100);
             }
         };
@@ -194,7 +210,7 @@ function htmlToMarkdown(element) {
 
     // Handle text nodes
     if (element.nodeType === Node.TEXT_NODE) {
-        return element.textContent?.trim() || '';
+        return escapeMarkdownSpecialChars(element.textContent?.trim() || '');
     }
 
     // Ensure we have a valid element with nodeName
@@ -205,59 +221,133 @@ function htmlToMarkdown(element) {
 
     // Switch statement with node name processing
     switch (nodeName) {
-        case 'h1': return `# ${element.textContent?.trim() || ''}\n`;
-        case 'h2': return `## ${element.textContent?.trim() || ''}\n`;
-        case 'h3': return `### ${element.textContent?.trim() || ''}\n`;
-        case 'h4': return `#### ${element.textContent?.trim() || ''}\n`;
-        case 'h5': return `##### ${element.textContent?.trim() || ''}\n`;
-        case 'h6': return `###### ${element.textContent?.trim() || ''}\n`;
+        case 'div':
+        case 'body':
+        case 'html':
+            return processChildNodes(element);
+
+        case 'dl':
+            return processDefinitionList(element);
+
+        case 'dt':
+            return `**${processNodeContent(element)}**\n\n`;
+
+        case 'dd':
+            return `${processNodeContent(element)}\n\n`;
+
+        case 'span':
+            return processNodeContent(element);
+
+        case 'h1': return `# ${processNodeContent(element)}\n\n`;
+        case 'h2': return `## ${processNodeContent(element)}\n\n`;
+        case 'h3': return `### ${processNodeContent(element)}\n\n`;
+        case 'h4': return `#### ${processNodeContent(element)}\n\n`;
+        case 'h5': return `##### ${processNodeContent(element)}\n\n`;
+        case 'h6': return `###### ${processNodeContent(element)}\n\n`;
 
         case 'p':
-            return `${element.textContent?.trim() || ''}\n\n`;
+            return `${processNodeContent(element)}\n\n`;
 
         case 'strong':
-        case 'b': return `**${element.textContent?.trim() || ''}**`;
+        case 'b': return `**${processNodeContent(element)}**`;
 
         case 'em':
-        case 'i': return `*${element.textContent?.trim() || ''}*`;
+        case 'i': return `*${processNodeContent(element)}*`;
 
-        case 'a':
-            return `[${element.textContent?.trim() || ''}](${element.getAttribute('href') || ''})`;
+        case 'a': {
+            const href = element.getAttribute('href') || '';
+            const text = processNodeContent(element);
+            return `[${text}](${href})`;
+        }
 
         case 'ul':
             return Array.from(element.children || [])
-                .map(li => `- ${htmlToMarkdown(li).trim()}\n`)
+                .map(li => `- ${processNodeContent(li)}\n`)
                 .join('') + '\n';
 
         case 'ol':
             return Array.from(element.children || [])
-                .map((li, index) => `${index + 1}. ${htmlToMarkdown(li).trim()}\n`)
+                .map((li, index) => `${index + 1}. ${processNodeContent(li)}\n`)
                 .join('') + '\n';
 
         case 'li': {
-            // Handle nested elements within list items
-            const childContent = Array.from(element.childNodes || [])
-                .map(child => {
-                    // Check if it's a text node or needs special processing
-                    if (child.nodeType === Node.TEXT_NODE) {
-                        return child.textContent?.trim() || '';
-                    }
-                    return htmlToMarkdown(child);
-                })
-                .filter(content => content.trim() !== '')
-                .join(' ');
-
+            const childContent = processNodeContent(element);
             return childContent.trim();
         }
 
+        case 'code':
+            return `\`${processNodeContent(element)}\``;
+
+        case 'pre':
+            return `\`\`\`\n${processNodeContent(element)}\n\`\`\`\n\n`;
+
+        case 'blockquote':
+            return `> ${processNodeContent(element)}\n\n`;
+
         default:
-            // Recursively process child nodes for unknown elements
-            return Array.from(element.childNodes || [])
-                .map(child => htmlToMarkdown(child))
-                .filter(content => content.trim() !== '')
-                .join(' ');
+            return processNodeContent(element);
     }
 }
+
+function processDefinitionList(element) {
+    return Array.from(element.children || [])
+        .map(child => {
+            const nodeName = child.nodeName.toLowerCase();
+            switch (nodeName) {
+                case 'dt':
+                    return `**${processNodeContent(child)}**\n\n`;
+                case 'dd':
+                    return `${processNodeContent(child)}\n\n`;
+                default:
+                    return processNodeContent(child);
+            }
+        })
+        .join('');
+}
+
+function processChildNodes(node) {
+    if (!node) return '';
+
+    return Array.from(node.childNodes || [])
+        .map(child => {
+            if (child.nodeType === Node.TEXT_NODE) {
+                return escapeMarkdownSpecialChars(child.textContent?.trim() || '');
+            }
+            return htmlToMarkdown(child);
+        })
+        .filter(content => content.trim() !== '')
+        .join('\n');
+}
+
+function processNodeContent(node) {
+    if (!node) return '';
+
+    // If it's a text node, return escaped content
+    if (node.nodeType === Node.TEXT_NODE) {
+        return escapeMarkdownSpecialChars(node.textContent?.trim() || '');
+    }
+
+    // Process child nodes
+    const childContents = Array.from(node.childNodes || [])
+        .map(child => {
+            // Recursive processing of child nodes
+            if (child.nodeType === Node.TEXT_NODE) {
+                return escapeMarkdownSpecialChars(child.textContent?.trim() || '');
+            }
+            return htmlToMarkdown(child);
+        })
+        .filter(content => content.trim() !== '')
+        .join(' ');
+
+    return childContents.trim();
+}
+
+function escapeMarkdownSpecialChars(text) {
+    return text
+        .replace(/([\\`*_{}[\]()#+\-.!])/g, '\\$1')
+        .replace(/\n/g, ' ');
+}
+
 
 // YT Transcription interface
 const getTranscriptionFor = async (ytUrl) => {
@@ -369,7 +459,7 @@ const getPocket = {
     goToVideos: async () => await goToUrl('https://getpocket.com/saves/videos') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
     goToArticls: async () => await goToUrl('https://getpocket.com/saves/articles') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
 
-    getPublishersSize: async () => (allElements(POCKET_PUBLISHER_SELECTOR)).length,
+    itemsSize: async () => (allElements(POCKET_PUBLISHER_SELECTOR)).length,
     getPublisher: async (childNr) => getText(element(`${POCKET_PUBLISHER_SELECTOR}:nth(${childNr})`)),
     getOriginUrl: async (childNr) => getAttribute(element(`${POCKET_PUBLISHER_SELECTOR}:nth(${childNr})`), 'href'),
     getTitle: async (childNr) => getText(element(`${POCKET_PUBLISHER_SELECTOR}:nth(${childNr})`)),
