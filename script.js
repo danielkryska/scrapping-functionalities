@@ -14,59 +14,65 @@ async function loadScript(url) {
 
 // NAVIGATION
 async function newTab(url = 'about:blank', scripts = ['https://raw.githubusercontent.com/danielkryska/scrapping-functionalities/refs/heads/master/script.js']) {
-    console.log(`Opening new tab: "${url}"...`);
-    
+    // For extension context, we can use chrome.tabs API
     return new Promise((resolve, reject) => {
-        const tab = window.open(url, '_blank');
-        if (!tab) {
-            reject(new Error('The new tab couldn\'t be opened.'));
-            return;
-        }
-        
-        const checkLoad = () => {
-            try {
-                if (tab.document.readyState === 'complete') {
-                    console.log(`Tab "${url}" loaded.`);
+        // Create a new tab with the target URL
+        chrome.tabs.create({ url: url, active: true }, async (newTab) => {
+            console.log(`Tab created with ID: ${newTab.id}`);
+            
+            // Wait for the tab to finish loading
+            chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo, tab) {
+                if (tabId === newTab.id && changeInfo.status === 'complete') {
+                    // Remove the listener once we've handled the event
+                    chrome.tabs.onUpdated.removeListener(listener);
                     
-                    // Focus the new tab
-                    tab.focus();
-                    
-                    // Load scripts in the new tab's context
-                    const loadScripts = async () => {
+                    // Execute each script in the new tab's context
+                    const injectScripts = async () => {
                         try {
                             for (const scriptUrl of scripts) {
-                                await (async function() {
-                                    const scriptResponse = await fetch(scriptUrl);
-                                    if (!scriptResponse.ok) throw new Error(`Failed to fetch script: ${scriptUrl}`);
-                                    const scriptContent = await scriptResponse.text();
-                                    
-                                    const script = tab.document.createElement("script");
-                                    script.textContent = scriptContent;
-                                    tab.document.documentElement.appendChild(script);
-                                    
-                                    // Use the new tab's console
-                                    tab.console.log(`Script loaded in new tab: ${scriptUrl}`);
-                                })();
+                                // Fetch the script content
+                                const response = await fetch(scriptUrl);
+                                if (!response.ok) throw new Error(`Failed to fetch script: ${scriptUrl}`);
+                                const scriptContent = await response.text();
+                                
+                                // Inject the script into the tab
+                                chrome.scripting.executeScript({
+                                    target: { tabId: newTab.id },
+                                    func: (code) => {
+                                        // This function runs in the context of the target tab
+                                        const script = document.createElement('script');
+                                        script.textContent = code;
+                                        document.documentElement.appendChild(script);
+                                        console.log(`Script injected successfully`);
+                                    },
+                                    args: [scriptContent]
+                                }, () => {
+                                    if (chrome.runtime.lastError) {
+                                        console.error('Script injection error:', chrome.runtime.lastError);
+                                    } else {
+                                        console.log(`Script injected: ${scriptUrl}`);
+                                    }
+                                });
+                                
+                                // Add a small delay between script injections
+                                await new Promise(resolve => setTimeout(resolve, 100));
                             }
-                            tab.console.log("All scripts loaded in new tab");
-                            resolve(tab);
-                        } catch (scriptError) {
-                            tab.console.error("Error loading scripts in new tab:", scriptError);
-                            reject(scriptError);
+                            
+                            // Focus the tab when all scripts are loaded
+                            chrome.tabs.update(newTab.id, { active: true }, () => {
+                                console.log('All scripts injected, tab focused');
+                                resolve(newTab);
+                            });
+                        } catch (error) {
+                            console.error('Error during script injection:', error);
+                            reject(error);
                         }
                     };
                     
-                    loadScripts();
-                } else {
-                    setTimeout(checkLoad, 100);
+                    injectScripts();
                 }
-            } catch (e) {
-                // This catch block handles the case when the tab is not yet ready
-                setTimeout(checkLoad, 100);
-            }
-        };
-        
-        checkLoad();
+            });
+        });
     });
 }
 
