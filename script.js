@@ -460,9 +460,9 @@ const getPocket = {
     goToArticls: async () => await goToUrl('https://getpocket.com/saves/articles') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
 
     itemsSize: async () => (allElements(POCKET_PUBLISHER_SELECTOR)).length,
-    getPublisher: async (childNr) => getText(element(`${POCKET_PUBLISHER_SELECTOR}:nth(${childNr})`)),
-    getOriginUrl: async (childNr) => getAttribute(element(`${POCKET_PUBLISHER_SELECTOR}:nth(${childNr})`), 'href'),
-    getTitle: async (childNr) => getText(element(`${POCKET_PUBLISHER_SELECTOR}:nth(${childNr})`)),
+    getPublisher: async (childNr) => getText(element(`${POCKET_PUBLISHER_SELECTOR}:nth-child(${childNr})`)),
+    getOriginUrl: async (childNr) => getAttribute(element(`${POCKET_PUBLISHER_SELECTOR}:nth-child(${childNr})`), 'href'),
+    getTitle: async (childNr) => getText(element(`${POCKET_PUBLISHER_SELECTOR}:nth-child(${childNr})`)),
 
     removeItem: async (childNr) => (await waitUntil(POCKET_ITEM_OPTIONS_SELECTOR(childNr), { visible: true })).click() && (await waitUntil(POCKET_ITEM_REMOVE_SELECTOR(childNr), { visible: true })).click()
 };
