@@ -357,8 +357,7 @@ const POCKET_ITEM_OPTIONS_SELECTOR = (childNr) => `article[data-testid="article-
 const POCKET_ITEM_TITLE_SELECTOR = (childNr) => `article[data-testid="article-card"]:nth-child(${childNr}) h2.title`;
 const POCKET_ITEM_REMOVE_SELECTOR = (childNr) => `article[data-testid="article-card"]:nth-child(${childNr}) div[data-testid="Delete"]`;
 const getPocket = {
-    goToVideos: async () => await newTab('https://getpocket.com/saves/videos') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
-    goToArticls: async () => await newTab('https://getpocket.com/saves/articles') && await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true }),
+    isLoaded: async () => !!(await waitUntil(element(POCKET_PUBLISHER_SELECTOR), { visible: true })),
 
     itemsSize: async () => (allElements(POCKET_PUBLISHER_SELECTOR)).length,
     getPublisher: async (childNr) => getText(element(`${POCKET_PUBLISHER_SELECTOR}:nth-child(${childNr})`)),
@@ -378,7 +377,8 @@ const GEMINI_CHAT_STOP_BTN_SELECTOR = 'mat-icon[data-mat-icon-name="stop"]';
 const GEMINI_RESPONSE_SELECTOR = 'message-content';
 
 const geminiChat = {
-    goToChat: async () => await newTab(GEMINI_CHAT_URL) && await waitUntil(element(GEMINI_CHAT_INPUT_SELECTOR), { visible: true }),
+    isLoaded: async () => !!(await waitUntil(element(GEMINI_CHAT_INPUT_SELECTOR), { visible: true })),
+    
     setPrompt: async (text) => setValue(GEMINI_CHAT_INPUT_SELECTOR, text) && await wait(1000),
     submitPrompt: async () => (await element(GEMINI_CHAT_SUBMIT_SELECTOR)).click() && await wait(1000),
     newChat: async () => (await element(GEMINI_CHAT_NEW_CHAT_SELECTOR)).click() && await wait(1000),
