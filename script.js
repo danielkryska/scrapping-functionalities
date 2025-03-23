@@ -74,36 +74,38 @@ function setTabActive() {
     window.focus();
 }
 
-async function goToUrl(url, scripts = []) {
+async function goToUrl(url, scripts = ['https://raw.githubusercontent.com/danielkryska/scrapping-functionalities/refs/heads/master/script.js']) {
     console.log(`Going to "${url}"...`);
-
+    
     return new Promise((resolve, reject) => {
         if (typeof url !== 'string' || url.trim() === '') {
             reject(new Error('Invalid URL'));
             return;
         }
-
-        // Przechwytujemy zdarzenie załadowania strony
-        const onLoad = () => {
+        
+        // Handle page load event
+        const onLoad = async () => {
             console.log(`Page "${url}" loaded.`);
-
-            // Dodawanie skryptów
-            const loadScripts = scripts.map(scriptUrl => {
-                return new Promise((scriptResolve, scriptReject) => {
-                    const script = document.createElement('script');
-                    script.src = scriptUrl;
-                    script.async = true;
-                    script.onload = () => scriptResolve(`Script laoded: ${scriptUrl}`);
-                    script.onerror = () => scriptReject(new Error(`Error while loading script: ${scriptUrl}`));
-                    document.head.appendChild(script);
-                });
-            });
-
-            Promise.all(loadScripts)
-                .then(results => resolve(results))
-                .catch(error => reject(error));
+            
+            try {
+                // Load each script sequentially using loadScript
+                for (const scriptUrl of scripts) {
+                    console.log(`Loading script: ${scriptUrl}`);
+                    await loadScript(scriptUrl);
+                    console.log(`Script loaded successfully: ${scriptUrl}`);
+                }
+                
+                resolve('All scripts loaded successfully');
+            } catch (error) {
+                console.error('Error loading scripts:', error);
+                reject(error);
+            }
         };
+        
+        // Add event listener for page load
         window.addEventListener('load', onLoad, { once: true });
+        
+        // Navigate to the URL
         window.location.href = url;
     });
 }
