@@ -18,40 +18,45 @@ async function newTab(url = 'about:blank', scripts = ['https://raw.githubusercon
     
     return new Promise((resolve, reject) => {
         const tab = window.open(url, '_blank');
-
         if (!tab) {
             reject(new Error('The new tab couldn\'t be opened.'));
             return;
         }
-
-        const checkLoad = async () => {
+        
+        const checkLoad = () => {
             try {
                 if (tab.document.readyState === 'complete') {
                     console.log(`Tab "${url}" loaded.`);
-                    window.focus();
                     
-                    // Use Promise.all to load all scripts concurrently
-                    try {
-                        for (const scriptUrl of scripts) {
-                            // Using the loadScript function within the new tab's context
-                            await (async function() {
-                                const scriptResponse = await fetch(scriptUrl);
-                                if (!scriptResponse.ok) throw new Error(`Failed to fetch script: ${scriptUrl}`);
-                                const scriptContent = await scriptResponse.text();
-                                
-                                const script = tab.document.createElement("script");
-                                script.textContent = scriptContent;
-                                tab.document.documentElement.appendChild(script);
-                                
-                                console.log(`Script loaded in new tab: ${scriptUrl}`);
-                            })();
+                    // Focus the new tab
+                    tab.focus();
+                    
+                    // Load scripts in the new tab's context
+                    const loadScripts = async () => {
+                        try {
+                            for (const scriptUrl of scripts) {
+                                await (async function() {
+                                    const scriptResponse = await fetch(scriptUrl);
+                                    if (!scriptResponse.ok) throw new Error(`Failed to fetch script: ${scriptUrl}`);
+                                    const scriptContent = await scriptResponse.text();
+                                    
+                                    const script = tab.document.createElement("script");
+                                    script.textContent = scriptContent;
+                                    tab.document.documentElement.appendChild(script);
+                                    
+                                    // Use the new tab's console
+                                    tab.console.log(`Script loaded in new tab: ${scriptUrl}`);
+                                })();
+                            }
+                            tab.console.log("All scripts loaded in new tab");
+                            resolve(tab);
+                        } catch (scriptError) {
+                            tab.console.error("Error loading scripts in new tab:", scriptError);
+                            reject(scriptError);
                         }
-                        console.log("All scripts loaded in new tab");
-                        resolve(tab);
-                    } catch (scriptError) {
-                        console.error("Error loading scripts in new tab:", scriptError);
-                        reject(scriptError);
-                    }
+                    };
+                    
+                    loadScripts();
                 } else {
                     setTimeout(checkLoad, 100);
                 }
@@ -60,7 +65,7 @@ async function newTab(url = 'about:blank', scripts = ['https://raw.githubusercon
                 setTimeout(checkLoad, 100);
             }
         };
-
+        
         checkLoad();
     });
 }
